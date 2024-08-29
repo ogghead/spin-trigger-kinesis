@@ -1,0 +1,27 @@
+[package]
+name = "trigger-kinesis"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.76"
+
+[dependencies]
+anyhow = "1.0.68"
+async-trait = "0.1"
+aws-config = "1.5.5"
+aws-sdk-kinesis = "1.40.0"
+clap = { version = "3.1.15", features = ["derive", "env"] }
+futures = "0.3.25"
+serde = "1.0"
+spin-core = { git = "https://github.com/fermyon/spin", tag = "v2.6.0" }
+spin-telemetry = { git = "https://github.com/fermyon/spin", tag = "v2.6.0" }
+spin-trigger = { git = "https://github.com/fermyon/spin", tag = "v2.6.0" }
+tokio = { version = "1.37", features = ["full"] }
+tokio-scoped = "0.2.0"
+tokio-stream = "0.1.15"
+tracing = { version = "0.1", features = ["log"] }
+wasmtime = { version = "21.0.1" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# This needs to be an explicit dependency to enable
+# '--features openssl/vendored', which is used for Linux releases.
+openssl = { version = "0.10" }

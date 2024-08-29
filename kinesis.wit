@@ -1,0 +1,22 @@
+package fermyon:spin-kinesis@2.0.0;
+
+interface kinesis-types {
+    record blob {
+        inner: list<u8>,
+    }
+
+    record kinesis-record {
+        sequence-number: string,
+        // TODO: Add other fields
+        data: blob
+    }
+
+    variant error {
+        other(string),
+    }
+}
+
+world spin-kinesis {
+    use kinesis-types.{blob, kinesis-record, error};
+    export handle-stream-message: func(msg: kinesis-record) -> result<_, error>;
+}

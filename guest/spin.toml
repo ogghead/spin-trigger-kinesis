@@ -1,0 +1,18 @@
+spin_manifest_version = 2
+
+[application]
+name = "kinesis-sample"
+authors = ["ogghead <darwin@sprout.org>"]
+description = ""
+version = "0.1.0"
+
+[[trigger.kinesis]]
+component = "oggheadtest"
+stream_arn = "arn:aws:kinesis:us-east-1:123456789012:stream/TestStream"
+shard_record_limit = 10
+idle_wait_seconds = 10
+
+[component.oggheadtest]
+source = "target/wasm32-wasi/release/guest.wasm"
+[component.oggheadtest.build]
+command = "cargo build --target wasm32-wasi --release"
