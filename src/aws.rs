@@ -37,7 +37,7 @@ impl<'a> ShardPoller<'a, New> {
             .get_shard_iterator()
             .stream_arn(self.stream_arn)
             .shard_id(self.shard_id)
-            .shard_iterator_type(aws_sdk_kinesis::types::ShardIteratorType::TrimHorizon)
+            .shard_iterator_type(aws_sdk_kinesis::types::ShardIteratorType::Latest)
             .send()
             .await
             .map(|res| res.shard_iterator)

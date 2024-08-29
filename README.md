@@ -59,7 +59,7 @@ The following options are available to set in the `[[trigger.kinesis]]` section:
 | Name                  | Type             | Required? | Description |
 |-----------------------|------------------|-----------|-------------|
 | `stream_arn`          | string           | required | The stream to which this trigger listens and responds. |
-| `shard_record_limit`        | number           | optional | The maximum number of records to fetch per Kinesis shard on each poll. The default is 10. Note that the total number of records per poll is equal to shard_record_limit * number of shards. This refers specifically to how records are fetched from AWS - the component is still invoked separately for each record. |
+| `shard_record_limit`  | number           | optional | The maximum number of records to fetch per Kinesis shard on each poll. The default is 10. Note that the total number of records per poll is equal to shard_record_limit * number of shards. This refers specifically to how records are fetched from AWS - the component is still invoked separately for each record. |
 | `idle_wait_seconds`   | number           | optional | How long (in seconds) to wait between checks when the stream is idle (i.e. when no messages were received on the last check). The default is 2. If the stream is _not_ idle, there is no wait between checks. The idle wait is also applied if an error occurs. |
 | `component`           | string or table  | required | The component to run when a stream record is received. (This is the standard Spin trigger component field.) |
 
@@ -93,5 +93,7 @@ There is no SDK for kinesis guest components.  Use the `kinesis.wit` file to gen
 **Note:** In the current WIT, a record has a single `data` field. This contains the content of the record encoded as binary. Feedback is welcome on this design decision.
 
 Your handler can an error, but should otherwise not return anything.
+
+**Note:** The trigger currently uses the `ShardIteratorType::Latest` polling type -- this means that data added to a stream before the app is spun up will not be read from the stream.
 
 **Note:** The trigger continues to poll shards while a handler is running. This means that records are not necessarily processed sequentially.

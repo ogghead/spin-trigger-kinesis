@@ -1,4 +1,4 @@
 /target
 *.tar.gz
-trigger-sqs.json
+trigger-kinesis.json
 /.spin
