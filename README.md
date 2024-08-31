@@ -94,4 +94,6 @@ There is no SDK for kinesis guest components.  Use the `kinesis.wit` file to gen
 
 Your handler can an error, but should otherwise not return anything.
 
+**Note:** The trigger currently processes records using ShardIteratorType::Latest. This means that only records published after the app is running will be read.
+
 **Note:** The trigger continues to poll shards while a handler is running. This means that records are not necessarily processed sequentially.

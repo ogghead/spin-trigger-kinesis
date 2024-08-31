@@ -6,8 +6,6 @@ wit_bindgen::generate!({
     }
 });
 
-use fermyon::spin_kinesis::kinesis_types as kinesis;
-
 struct Kinesis;
 
 impl Guest for Kinesis {
