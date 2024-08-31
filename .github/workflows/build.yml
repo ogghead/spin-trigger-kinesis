@@ -98,7 +98,7 @@ jobs:
         run: ls -R
       - name: pluginify it
         run: |
-          spin pluginify --merge --release-url-base https://github.com/fermyon/spin-trigger-kinesis/releases/download/${{ env.RELEASE_VERSION }}/ >${{ env.PROGRAM_NAME }}.json
+          spin pluginify --merge --release-url-base https://github.com/ogghead/spin-trigger-kinesis/releases/download/${{ env.RELEASE_VERSION }}/ >${{ env.PROGRAM_NAME }}.json
       - name: Display merged manifest
         run: cat ${{ env.PROGRAM_NAME }}.json
 
