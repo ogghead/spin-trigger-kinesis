@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use aws::ShardPoller;
 use aws_config::BehaviorVersion;
 use aws_sdk_kinesis::{types::Record, Client};
 use futures::{StreamExt, TryStreamExt};
@@ -155,15 +156,14 @@ impl KinesisTrigger {
 
         // create a poller for each shard
         let shard_pollers: Result<Vec<_>> = tokio_stream::iter(shards.shards())
-            .map(|shard| {
-                aws::ShardPoller::new(
+            .then(|shard| {
+                aws::ShardPoller::try_new(
                     client.clone(),
                     &component.stream_arn,
                     &shard.shard_id,
                     component.shard_record_limit,
                 )
             })
-            .then(|poller| poller.make_ready())
             .try_collect()
             .await;
 
@@ -173,7 +173,7 @@ impl KinesisTrigger {
 
         loop {
             let records: Vec<Record> = tokio_stream::iter(shard_pollers.iter_mut())
-                .then(|poller| poller.get_records())
+                .then(ShardPoller::get_records)
                 .flat_map(tokio_stream::iter)
                 .collect()
                 .await;
