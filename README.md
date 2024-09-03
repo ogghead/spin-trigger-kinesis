@@ -1,4 +1,6 @@
-# Experimental Kinesis trigger for Spin
+# Experimental Kinesis trigger for Fermyon Spin
+
+This is a [Fermyon Spin](https://www.fermyon.com/spin) trigger for [AWS Kinesis](https://docs.aws.amazon.com/streams/latest/dev/introduction.html) -- a solution for streaming bulk loads of real-time data.
 
 ## Install the latest release
 
@@ -77,6 +79,7 @@ version = "0.1.0"
 stream_arn = "arn:aws:kinesis:us-east-1:1234567890:stream/TestStream"
 shard_record_limit = 10
 idle_wait_seconds = 10
+component = "test"
 
 [component.test]
 source = "..."
