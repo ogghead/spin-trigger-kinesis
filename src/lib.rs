@@ -2,10 +2,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use aws::ShardPoller;
+use aws::{ShardDetector, ShardPoller};
 use aws_config::BehaviorVersion;
 use aws_sdk_kinesis::{types::Record, Client};
-use futures::{StreamExt, TryStreamExt};
 use serde::{Deserialize, Serialize};
 use spin_core::InstancePre;
 use spin_trigger::{cli::NoArgs, TriggerAppEngine, TriggerExecutor};
@@ -18,6 +17,7 @@ wasmtime::component::bindgen!({
 });
 
 use fermyon::spin_kinesis::kinesis_types as kinesis;
+use tokio::sync::mpsc;
 
 pub(crate) type RuntimeData = ();
 
@@ -31,16 +31,18 @@ pub struct KinesisTrigger {
 pub struct KinesisTriggerConfig {
     pub component: String,
     pub stream_arn: String,
-    pub shard_record_limit: Option<u16>,
-    pub idle_wait_seconds: Option<u64>,
+    pub batch_size: Option<u16>,
+    pub shard_idle_wait_seconds: Option<u64>,
+    pub detector_poll_seconds: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
 struct Component {
-    pub id: String,
-    pub stream_arn: String,
-    pub shard_record_limit: u16,
-    pub idle_wait: tokio::time::Duration,
+    pub id: Arc<String>,
+    pub stream_arn: Arc<String>,
+    pub batch_size: u16,
+    pub shard_idle_wait_seconds: tokio::time::Duration,
+    pub detector_poll_seconds: tokio::time::Duration,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -73,10 +75,15 @@ impl TriggerExecutor for KinesisTrigger {
         let queue_components = engine
             .trigger_configs()
             .map(|(_, config)| Component {
-                id: config.component.clone(),
-                stream_arn: config.stream_arn.clone(),
-                shard_record_limit: config.shard_record_limit.unwrap_or(10),
-                idle_wait: tokio::time::Duration::from_secs(config.idle_wait_seconds.unwrap_or(2)),
+                id: Arc::new(config.component.clone()),
+                stream_arn: Arc::new(config.stream_arn.clone()),
+                batch_size: config.batch_size.unwrap_or(10),
+                shard_idle_wait_seconds: tokio::time::Duration::from_secs(
+                    config.shard_idle_wait_seconds.unwrap_or(2),
+                ),
+                detector_poll_seconds: tokio::time::Duration::from_secs(
+                    config.detector_poll_seconds.unwrap_or(30),
+                ),
             })
             .collect();
 
@@ -134,58 +141,44 @@ impl KinesisTrigger {
     async fn receive(
         engine: Arc<TriggerAppEngine<Self>>,
         client: Client,
-        component: Component,
+        Component {
+            stream_arn,
+            batch_size,
+            shard_idle_wait_seconds,
+            detector_poll_seconds,
+            id,
+        }: Component,
     ) -> TerminationReason {
-        // TODO: Poll on a cadence for new shards and add them to the list of shards to poll
-        let shards = match client
-            .list_shards()
-            .stream_arn(&component.stream_arn)
-            .send()
-            .await
-        {
-            Ok(shards) => shards,
-            Err(e) => {
-                tracing::error!(
-                    "Stream {}: error listing shards: {:?}",
-                    component.stream_arn,
-                    e
-                );
-                return TerminationReason::Other("Error listing shards".to_owned());
-            }
-        };
+        let (tx_new_shard, mut rx_new_shard) = mpsc::channel(4);
+        let (tx_finished_shard, rx_finished_shard) = mpsc::channel(4);
 
-        // create a poller for each shard
-        let shard_pollers: Result<Vec<_>> = tokio_stream::iter(shards.shards())
-            .then(|shard| {
-                aws::ShardPoller::try_new(
-                    client.clone(),
-                    &component.stream_arn,
-                    &shard.shard_id,
-                    component.shard_record_limit,
-                )
-            })
-            .try_collect()
-            .await;
+        // Spawn a task to send new shards to the receiver
+        let shard_detector = ShardDetector::new(
+            &stream_arn,
+            detector_poll_seconds,
+            &client,
+            rx_finished_shard,
+            tx_new_shard,
+        );
+        tokio::spawn(shard_detector.poll_new_shards());
 
-        let Ok(mut shard_pollers) = shard_pollers else {
-            return TerminationReason::Other("Error creating shard pollers".to_owned());
-        };
-
+        // Main event loop -- spawn a poller for each new shard received
         loop {
-            let records: Vec<Record> = tokio_stream::iter(shard_pollers.iter_mut())
-                .then(ShardPoller::get_records)
-                .flat_map(tokio_stream::iter)
-                .collect()
-                .await;
-
-            if records.is_empty() {
-                tokio::time::sleep(component.idle_wait).await;
+            if let Some(shard_id) = rx_new_shard.recv().await {
+                let shard_poller = ShardPoller::new(
+                    &engine,
+                    &id,
+                    &tx_finished_shard,
+                    &client,
+                    &stream_arn,
+                    shard_id,
+                    batch_size,
+                    shard_idle_wait_seconds,
+                );
+                tokio::spawn(shard_poller.poll_records());
             } else {
-                for record in records {
-                    // TODO: Should we process records in order?
-                    let processor = KinesisRecordProcessor::new(&engine, &component);
-                    tokio::spawn(async move { processor.process_record(record).await });
-                }
+                // The channel was closed, so the shard detector task has exited
+                return TerminationReason::Other("Shard detector task exited".to_string());
             }
         }
     }
@@ -193,83 +186,64 @@ impl KinesisTrigger {
 
 struct KinesisRecordProcessor {
     engine: Arc<TriggerAppEngine<KinesisTrigger>>,
-    component: Component,
+    component_id: Arc<String>,
 }
 
 impl KinesisRecordProcessor {
-    fn new(engine: &Arc<TriggerAppEngine<KinesisTrigger>>, component: &Component) -> Self {
+    fn new(engine: &Arc<TriggerAppEngine<KinesisTrigger>>, component_id: &Arc<String>) -> Self {
         Self {
             engine: engine.clone(),
-            component: component.clone(),
+            component_id: component_id.clone(),
         }
     }
 
-    async fn process_record(
-        &self,
-        Record {
-            sequence_number,
-            data,
-            ..
-        }: Record,
-    ) {
-        tracing::trace!("Record {sequence_number}: spawned processing task");
+    async fn process_records(&self, records: Vec<Record>) {
+        let records = records
+            .into_iter()
+            .map(|record| kinesis::KinesisRecord {
+                sequence_number: record.sequence_number,
+                data: kinesis::Blob {
+                    inner: record.data.into_inner(),
+                },
+            })
+            .collect::<Vec<_>>();
 
-        let blob = kinesis::Blob {
-            inner: data.into_inner(),
-        };
-        let record = kinesis::KinesisRecord {
-            sequence_number: sequence_number.clone(),
-            data: blob,
-        };
-
-        let action = self.execute_wasm(record).await;
+        let action = self.execute_wasm(&records).await;
 
         match action {
             Ok(_) => {
-                tracing::trace!("Record {sequence_number} processed successfully");
+                tracing::trace!("Records processed successfully");
             }
             Err(e) => {
-                tracing::error!(
-                    "Record {sequence_number} processing error: {}",
-                    e.to_string()
-                );
-                // TODO: change message visibility to 0 I guess?
+                tracing::error!("Records processing error: {}", e.to_string());
             }
         }
     }
 
-    async fn execute_wasm(&self, record: kinesis::KinesisRecord) -> Result<()> {
-        let record_id = record.sequence_number.clone();
-        let component_id = &self.component.id;
-        tracing::trace!("Message {record_id}: executing component {component_id}");
+    async fn execute_wasm(&self, records: &[kinesis::KinesisRecord]) -> Result<()> {
+        let component_id = &self.component_id;
         let (instance, mut store) = self.engine.prepare_instance(component_id).await?;
 
         let instance = SpinKinesis::new(&mut store, &instance)?;
 
         match instance
-            .call_handle_stream_message(&mut store, &record)
+            .call_handle_batch_records(&mut store, records)
             .await
         {
             Ok(Ok(action)) => {
-                tracing::trace!("Record {record_id}: component {component_id} completed okay");
+                tracing::trace!("Component {component_id} completed okay");
                 Ok(action)
             }
             Ok(Err(e)) => {
-                tracing::warn!(
-                    "Record {record_id}: component {component_id} returned error {:?}",
-                    e
-                );
+                tracing::warn!("Component {component_id} returned error {:?}", e);
                 Err(anyhow::anyhow!(
-                    "Component {component_id} returned error processing record {record_id}"
+                    "Component {component_id} returned error processing records"
                 )) // TODO: more details when WIT provides them
             }
             Err(e) => {
-                tracing::error!(
-                    "Record {record_id}: engine error running component {component_id}: {:?}",
-                    e
-                );
+                tracing::error!("Engine error running component {component_id}: {:?}", e);
                 Err(anyhow::anyhow!(
-                    "Error executing component {component_id} while processing record {record_id}"
+                    "Error executing component {component_id} while processing records"
                 ))
             }
         }
