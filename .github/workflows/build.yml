@@ -58,7 +58,7 @@ jobs:
       - name: Pluginify plugin binary
         run: spin pluginify --arch ${{ matrix.config.arch }}
       - name: Archive pluginified
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4.4.0
         with:
           name: ${{ env.PROGRAM_NAME}}-${{ matrix.config.os }}-${{ matrix.config.arch }}
           path: |
@@ -88,7 +88,7 @@ jobs:
         shell: bash
         run: echo "RELEASE_VERSION=canary" >> $GITHUB_ENV
       - name: set the release version (TEST TEST TEST)
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' 
         shell: bash
         run: echo "RELEASE_VERSION=precanary" >> $GITHUB_ENV
 
