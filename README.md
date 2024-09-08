@@ -23,7 +23,7 @@ spin plugins install --url https://github.com/ogghead/spin-trigger-kinesis/relea
 
 You will need Rust and the `pluginify` plugin (`spin plugins install --url https://github.com/itowlson/spin-pluginify/releases/download/canary/pluginify.json`).
 
-```
+```sh
 cargo build --release
 spin pluginify --install
 ```
@@ -35,7 +35,7 @@ Be sure to set `AWS_DEFAULT_REGION` in your environment to the region of your st
 
 You will also need to change the `stream_arn` in `spin.toml` to a stream you have access to.
 
-```
+```sh
 cd guest
 spin build --up
 ```
@@ -58,12 +58,13 @@ The trigger type is `kinesis`, and there are no application-level configuration 
 
 The following options are available to set in the `[[trigger.kinesis]]` section:
 
-| Name                  | Type             | Required? | Description |
-|-----------------------|------------------|-----------|-------------|
-| `stream_arn`          | string           | required | The stream to which this trigger listens and responds. |
-| `shard_record_limit`        | number           | optional | The maximum number of records to fetch per Kinesis shard on each poll. The default is 10. Note that the total number of records per poll is equal to shard_record_limit * number of shards. This refers specifically to how records are fetched from AWS - the component is still invoked separately for each record. |
-| `idle_wait_seconds`   | number           | optional | How long (in seconds) to wait between checks when the stream is idle (i.e. when no messages were received on the last check). The default is 2. If the stream is _not_ idle, there is no wait between checks. The idle wait is also applied if an error occurs. |
-| `component`           | string or table  | required | The component to run when a stream record is received. (This is the standard Spin trigger component field.) |
+| Name                        | Type             | Required? | Description |
+|-----------------------------|------------------|-----------|-------------|
+| `stream_arn`                | string           | required  | The stream to which this trigger listens and responds. |
+| `batch_size`                | number           | optional  | The maximum number of records to fetch per Kinesis shard on each poll. The default is 10. This directly affects the amount of records that your component is invoked with. |
+| `shard_idle_wait_seconds`   | number           | optional  | How long (in seconds) to wait between checks when the stream is idle (i.e. when no messages were received on the last check). The default is 2. If the stream is _not_ idle, there is no wait between checks. The idle wait is also applied if an error occurs. Note that this number should _not_ be greater than 300 seconds (5 minutes), as shard iterators time out after this period |
+| `detector_poll_seconds`     | number           | optional  | How long (in seconds) to wait between checks for new shards. The default is 30. |
+| `component`                 | string or table  | required | The component to run when a stream record is received. (This is the standard Spin trigger component field.) |
 
 For example:
 
@@ -77,8 +78,9 @@ version = "0.1.0"
 # One [[trigger.kinesis]] section for each stream to monitor
 [[trigger.kinesis]]
 stream_arn = "arn:aws:kinesis:us-east-1:1234567890:stream/TestStream"
-shard_record_limit = 10
-idle_wait_seconds = 10
+batch_size = 10
+shard_idle_wait_seconds = 10
+detector_poll_seconds = 30
 component = "test"
 
 [component.test]
@@ -91,7 +93,7 @@ There are no custom command line options for this trigger.
 
 ## Writing kinesis components
 
-There is no SDK for kinesis guest components.  Use the `kinesis.wit` file to generate a trigger binding for your language.  Your Wasm component must _export_ the `handle-stream-message` function.  See `guest/src/lib.rs`  for how to do this in Rust.
+There is no SDK for kinesis guest components.  Use the `kinesis.wit` file to generate a trigger binding for your language.  Your Wasm component must _export_ the `handle-batch-records` function.  See `guest/src/lib.rs`  for how to do this in Rust.
 
 **Note:** In the current WIT, a record has a single `data` field. This contains the content of the record encoded as binary. Feedback is welcome on this design decision.
 
@@ -99,4 +101,4 @@ Your handler can an error, but should otherwise not return anything.
 
 **Note:** The trigger currently processes records using ShardIteratorType::Latest. This means that only records published after the app is spun up will be processed by the trigger.
 
-**Note:** The trigger continues to poll shards while a handler is running. This means that records are not necessarily processed sequentially.
+**Note:** Shards are processed in order, but there is no guarantee of ordering between shards.

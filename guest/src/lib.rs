@@ -9,9 +9,12 @@ wit_bindgen::generate!({
 struct Kinesis;
 
 impl Guest for Kinesis {
-    fn handle_stream_message(record: KinesisRecord) -> Result<(), Error> {
-        println!("I GOT A RECORD!  ID: {:?}", record.sequence_number);
-        println!("  ... DATA: {:?}", record.data);
+    fn handle_batch_records(records: Vec<KinesisRecord>) -> Result<(), Error> {
+        for record in records {
+            println!("I GOT A RECORD!  ID: {:?}", record.sequence_number);
+            let data = String::from_utf8(record.data.inner).unwrap();
+            println!("  ... DATA: {:?}", data);
+        }
 
         Ok(())
     }
