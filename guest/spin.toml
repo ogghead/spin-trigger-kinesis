@@ -3,14 +3,16 @@ spin_manifest_version = 2
 [application]
 name = "kinesis-sample"
 authors = ["ogghead <darwin@sprout.org>"]
-description = ""
+description = "Example application for using AWS Kinesis in Fermyon Spin"
 version = "0.1.0"
 
 [[trigger.kinesis]]
 component = "oggheadtest"
 stream_arn = "arn:aws:kinesis:us-east-1:123456789012:stream/TestStream"
-batch_size = 10
-shard_idle_wait_seconds = 10
+batch_size = 1000
+shard_idle_wait_millis = 250
+detector_poll_millis = 30000
+shard_iterator_type = "TRIM_HORIZON"
 
 [component.oggheadtest]
 source = "target/wasm32-wasi/release/guest.wasm"

@@ -11,6 +11,6 @@ anyhow = "1"
 bytes = "1"
 http = "0.2"
 spin-sdk = "3.0"
-wit-bindgen = "0.13.0"
+spin-kinesis-sdk = { path = "../sdk" }
 
 [workspace]

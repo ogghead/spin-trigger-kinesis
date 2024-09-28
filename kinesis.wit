@@ -20,3 +20,7 @@ world spin-kinesis {
     use kinesis-types.{blob, kinesis-record, error};
     export handle-batch-records: func(records: list<kinesis-record>) -> result<_, error>;
 }
+
+world spin-kinesis-sdk {
+    import kinesis-types;
+}
