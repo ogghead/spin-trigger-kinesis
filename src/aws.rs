@@ -1,11 +1,13 @@
 use std::{collections::HashSet, sync::Arc, time::Duration};
 
+use anyhow::Result;
 use aws_sdk_kinesis::{
     operation::{get_records::GetRecordsOutput, list_shards::ListShardsOutput},
     types::ShardIteratorType,
     Client,
 };
 use spin_trigger::TriggerAppEngine;
+use tracing::{instrument, Instrument};
 
 use crate::{KinesisRecordProcessor, KinesisTrigger};
 
@@ -47,6 +49,7 @@ impl ShardPoller {
         }
     }
 
+    #[instrument(name = "spin_trigger_kinesis.get_shard_iterator", skip_all, fields(otel.name = format!("get_shard_iterator {}", self.component_id)))]
     async fn get_shard_iterator(&self) -> Option<String> {
         self.kinesis_client
             .get_shard_iterator()
@@ -60,70 +63,59 @@ impl ShardPoller {
             .unwrap_or_default()
     }
 
-    /// Get records from the shard using this poller. This will return an empty vector if there is no shard iterator
-    pub async fn poll_records(self) {
-        let mut shard_iterator = self.get_shard_iterator().await;
-        loop {
-            let Some(iterator) = shard_iterator else {
+    #[instrument(name = "spin_trigger_kinesis.get_records", skip_all, fields(otel.name = format!("get_records {}", self.component_id)))]
+    async fn get_records(&self, shard_iterator: impl Into<String>) -> Result<GetRecordsOutput> {
+        Ok(self
+            .kinesis_client
+            .get_records()
+            .shard_iterator(shard_iterator)
+            .stream_arn(self.stream_arn.as_ref())
+            .limit(self.batch_size.into())
+            .send()
+            .await?)
+    }
+
+    /// Poll for a batch of records to process
+    #[instrument(name = "spin_trigger_kinesis.poll_for_batch", skip_all, fields(otel.name = format!("poll_for_batch {}", self.component_id)))]
+    async fn poll_for_batch(&self, shard_iterator: impl Into<String>) -> Option<String> {
+        match self.get_records(shard_iterator).in_current_span().await {
+            Ok(GetRecordsOutput {
+                records,
+                next_shard_iterator,
+                millis_behind_latest,
+                ..
+            }) => {
+                if records.is_empty() && millis_behind_latest.unwrap_or_default() == 0 {
+                    tokio::time::sleep(self.shard_idle_wait_millis).await;
+                } else if !records.is_empty() {
+                    let processor = KinesisRecordProcessor::new(&self.engine, &self.component_id);
+                    // Wait until processing is completed for these records
+                    processor.process_records(records).in_current_span().await
+                }
+                next_shard_iterator
+            }
+            Err(err) => {
                 tracing::trace!(
-                    "[Kinesis] Null shard iterator for poller {}. Exiting poll loop",
+                    "[Kinesis] Got error while fetching records from shard {}: {err}",
                     self.shard_id
                 );
-                break;
-            };
-
-            match self
-                .kinesis_client
-                .get_records()
-                .shard_iterator(iterator)
-                .stream_arn(self.stream_arn.as_ref())
-                .limit(self.batch_size.into())
-                .send()
-                .await
-            {
-                Ok(GetRecordsOutput {
-                    records,
-                    next_shard_iterator,
-                    millis_behind_latest,
-                    // child_shards, TODO
-                    ..
-                }) => {
-                    shard_iterator = next_shard_iterator;
-
-                    // if let Some(child_shards) = child_shards {
-                    //     for child_shard in child_shards {
-                    //         let shard_poller = ShardPoller::new(
-                    //             &self.engine,
-                    //             &self.component_id,
-                    //             &self.tx_finished_shard,
-                    //             &self.kinesis_client,
-                    //             &self.stream_arn,
-                    //             child_shard.shard_id,
-                    //             self.batch_size,
-                    //             self.shard_idle_wait_millis,
-                    //             self.shard_iterator_type,
-                    //         );
-                    //         tokio::spawn(shard_poller.poll_records());
-                    //     }
-                    // }
-
-                    if records.is_empty() && millis_behind_latest.unwrap_or_default() == 0 {
-                        tokio::time::sleep(self.shard_idle_wait_millis).await;
-                    } else if !records.is_empty() {
-                        let processor =
-                            KinesisRecordProcessor::new(&self.engine, &self.component_id);
-                        // Wait until processing is completed for these records
-                        processor.process_records(records).await
-                    }
-                }
-                Err(e) => {
-                    tracing::trace!(
-                        "[Kinesis] Got error while fetching records from shard {}",
-                        e
-                    );
-                    break;
-                }
+                None
             }
+        }
+    }
+
+    /// Get records from the shard using this poller. This will return an empty vector if there is no shard iterator
+    pub async fn poll(self) {
+        let Some(mut shard_iterator) = self.get_shard_iterator().await else {
+            tracing::trace!(
+                "[Kinesis] Null shard iterator for poller {}. Exiting poll loop",
+                self.shard_id
+            );
+            return;
+        };
+
+        while let Some(new_shard_iterator) = self.poll_for_batch(shard_iterator).await {
+            shard_iterator = new_shard_iterator;
         }
 
         if let Err(err) = self.tx_finished_shard.send(self.shard_id).await {
@@ -160,6 +152,7 @@ impl ShardDetector {
         }
     }
 
+    /// Poll for new shards -- if we find new shards, we need to create a new shard poller for each
     pub async fn poll_new_shards(mut self) {
         loop {
             tokio::select! {

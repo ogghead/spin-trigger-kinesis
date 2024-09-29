@@ -22,7 +22,7 @@ wasmtime::component::bindgen!({
 
 use fermyon::spin_kinesis::kinesis_types as kinesis;
 use tokio::sync::mpsc;
-use tracing::instrument;
+use tracing::{instrument, Instrument};
 
 pub(crate) type RuntimeData = ();
 
@@ -89,7 +89,7 @@ impl TriggerExecutor for KinesisTrigger {
                     config.shard_idle_wait_millis.unwrap_or(1000),
                 ),
                 detector_poll_millis: parse_milliseconds(
-                    config.detector_poll_millis.unwrap_or(30000),
+                    config.detector_poll_millis.unwrap_or(30_000),
                 ),
                 shard_iterator_type: ShardIteratorType::from(
                     config
@@ -140,7 +140,7 @@ impl TriggerExecutor for KinesisTrigger {
 }
 
 fn parse_milliseconds(milliseconds: u64) -> Duration {
-    tokio::time::Duration::from_millis(milliseconds.clamp(100, 300000))
+    tokio::time::Duration::from_millis(milliseconds.clamp(100, 300_000))
 }
 
 impl KinesisTrigger {
@@ -168,8 +168,8 @@ impl KinesisTrigger {
             shard_iterator_type,
         }: Component,
     ) -> TerminationReason {
-        let (tx_new_shard, mut rx_new_shard) = mpsc::channel(4);
-        let (tx_finished_shard, rx_finished_shard) = mpsc::channel(4);
+        let (tx_new_shard, mut rx_new_shard) = mpsc::channel(10);
+        let (tx_finished_shard, rx_finished_shard) = mpsc::channel(10);
 
         // Spawn a task to send new shards to the receiver
         let shard_detector = ShardDetector::new(
@@ -194,7 +194,7 @@ impl KinesisTrigger {
                 shard_idle_wait_millis,
                 shard_iterator_type.clone(),
             );
-            tokio::spawn(shard_poller.poll_records());
+            tokio::spawn(shard_poller.poll());
         }
 
         TerminationReason::Other("Shard detector task exited".to_string())
@@ -226,7 +226,7 @@ impl KinesisRecordProcessor {
             })
             .collect::<Vec<_>>();
 
-        let action = self.execute_wasm(&records).await;
+        let action = self.execute_wasm(&records).in_current_span().await;
 
         match action {
             Ok(_) => {
@@ -238,6 +238,7 @@ impl KinesisRecordProcessor {
         }
     }
 
+    #[instrument(name = "spin_trigger_kinesis.execute_wasm", skip_all, fields(otel.name = format!("execute_wasm {}", self.component_id)))]
     async fn execute_wasm(&self, records: &[kinesis::KinesisRecord]) -> Result<()> {
         let component_id = &self.component_id;
         let (instance, mut store) = self.engine.prepare_instance(component_id).await?;
