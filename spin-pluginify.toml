@@ -1,6 +1,6 @@
 name = "trigger-kinesis"
 description = "A Spin trigger for Amazon Kinesis events"
-version = "0.2"
+version = "0.3"
 spin_compatibility = ">=2.6"
 license = "Apache-2.0"
 package = "./target/release/trigger-kinesis"

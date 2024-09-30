@@ -20,7 +20,7 @@ wasmtime::component::bindgen!({
     async: true
 });
 
-use fermyon::spin_kinesis::kinesis_types as kinesis;
+use fermyon::spin_kinesis::kinesis_types::{self as kinesis, EncryptionType};
 use tokio::sync::mpsc;
 use tracing::{instrument, Instrument};
 
@@ -219,10 +219,21 @@ impl KinesisRecordProcessor {
         let records = records
             .into_iter()
             .map(|record| kinesis::KinesisRecord {
+                partition_key: record.partition_key,
                 sequence_number: record.sequence_number,
                 data: kinesis::Blob {
                     inner: record.data.into_inner(),
                 },
+                approximate_arrival_timestamp: record
+                    .approximate_arrival_timestamp
+                    .map(|time| time.secs() as u64),
+                encryption_type: record.encryption_type.map(
+                    |encryption_type| match encryption_type {
+                        aws_sdk_kinesis::types::EncryptionType::Kms => EncryptionType::Kms,
+                        aws_sdk_kinesis::types::EncryptionType::None => EncryptionType::None,
+                        _ => EncryptionType::None,
+                    },
+                ),
             })
             .collect::<Vec<_>>();
 
@@ -254,16 +265,13 @@ impl KinesisRecordProcessor {
                 Ok(action)
             }
             Ok(Err(e)) => {
-                tracing::warn!("[Kinesis] Component {component_id} returned error {:?}", e);
+                tracing::warn!("[Kinesis] Component {component_id} returned error {e:?}");
                 Err(anyhow::anyhow!(
                     "[Kinesis] Component {component_id} returned error processing records"
-                )) // TODO: more details when WIT provides them
+                ))
             }
             Err(e) => {
-                tracing::error!(
-                    "[Kinesis] Engine error running component {component_id}: {:?}",
-                    e
-                );
+                tracing::error!("[Kinesis] Engine error running component {component_id}: {e:?}");
                 Err(anyhow::anyhow!(
                     "[Kinesis] Error executing component {component_id} while processing records"
                 ))

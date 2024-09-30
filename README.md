@@ -63,8 +63,9 @@ The following options are available to set in the `[[trigger.kinesis]]` section:
 | `stream_arn`                | string           | required  | The stream to which this trigger listens and responds. |
 | `batch_size`                | number           | optional  | The maximum number of records to fetch per Kinesis shard on each poll. The default is 10. This directly affects the amount of records that your component is invoked with. |
 | `shard_idle_wait_millis`    | number           | optional  | How long (in milliseconds) to wait between checks when the stream is idle (i.e. when no messages were received on the last check). The default is 1000. If the stream is _not_ idle, there is no wait between checks. The idle wait is also applied if an error occurs. Note that this number should _not_ exceed 300,000 milliseconds (5 minutes), as shard iterators time out after this period |
-| `detector_poll_millis`     | number           | optional  | How long (in milliseconds) to wait between checks for new shards. The default is 30,000 (30 seconds). |
-| `component`                 | string or table  | required | The component to run when a stream record is received. (This is the standard Spin trigger component field.) |
+| `detector_poll_millis`      | number           | optional  | How long (in milliseconds) to wait between checks for new shards. The default is 30,000 (30 seconds). |
+| `shard_iterator_type`       | enum             | optional  | See <https://docs.aws.amazon.com/cli/latest/reference/kinesis/get-shard-iterator.html#options> for possible options. Defaults to LATEST. |
+| `component`                 | string or table  | required  | The component to run when a stream record is received. This is the standard Spin trigger component field. |
 
 For example:
 

@@ -6220,7 +6220,7 @@ dependencies = [
 
 [[package]]
 name = "spin-kinesis-sdk"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "spin-executor",
  "spin-kinesis-macro",
@@ -7253,7 +7253,7 @@ dependencies = [
 
 [[package]]
 name = "trigger-kinesis"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
