@@ -3,7 +3,7 @@ name = "trigger-kinesis"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
-rust-version = "1.76"
+rust-version = "1.78"
 
 [workspace.package]
 authors = ["Darwin Boersma <darwin@sadlark.com>", "Fermyon Engineering <engineering@fermyon.com>"]
