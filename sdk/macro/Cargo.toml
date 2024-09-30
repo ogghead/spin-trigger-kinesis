@@ -1,0 +1,15 @@
+[package]
+name = "spin-kinesis-macro"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.71"
+include = ["../../kinesis.wit"]
+
+[lib]
+name = "spin_kinesis_macro"
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1.0"
+syn = { version = "1.0", features = ["full"] }

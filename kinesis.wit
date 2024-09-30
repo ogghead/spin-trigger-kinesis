@@ -1,14 +1,43 @@
 package fermyon:spin-kinesis@2.0.0;
 
 interface kinesis-types {
+    /// The encryption type used on the record.
+    enum encryption-type {
+        /// Do not encrypt the records in the stream.
+        NONE,
+        /// Use server-side encryption on the records in the stream using a customer-managed AWS KMS key.
+        KMS,
+    }
+
+    /// The data blob. The data in the blob is both opaque and immutable to Kinesis Data Streams, which does not inspect, interpret, or change the data in the blob in any way. When the data blob (the payload before base64-encoding) is added to the partition key size, the total size must not exceed the maximum record size (1 MiB).
+    /// Type: Base64-encoded binary data object
+    /// Length Constraints: Minimum length of 0. Maximum length of 1048576.
     record blob {
         inner: list<u8>,
     }
 
+    /// AWS Kinesis record
+    /// Refer to https://docs.aws.amazon.com/kinesis/latest/APIReference/API_Record.html for a detailed description of fields
     record kinesis-record {
+        /// The data blob. The data in the blob is both opaque and immutable to Kinesis Data Streams, which does not inspect, interpret, or change the data in the blob in any way. When the data blob (the payload before base64-encoding) is added to the partition key size, the total size must not exceed the maximum record size (1 MiB).
+        /// Type: Base64-encoded binary data object
+        /// Length Constraints: Minimum length of 0. Maximum length of 1048576.
+        data: blob,
+        /// Identifies which shard in the stream the data record is assigned to.
+        /// Type: String
+        /// Length Constraints: Minimum length of 1. Maximum length of 256.
+        partition-key: string,
+        /// The unique identifier of the record within its shard.
+        /// Type: String
+        /// Pattern: 0|([1-9]\d{0,128}) 
         sequence-number: string,
-        // TODO: Add other fields
-        data: blob
+        /// The approximate time that the record was inserted into the stream.
+        /// Type: UNIX timestamp in seconds
+        approximate-arrival-timestamp: option<u64>,
+        /// The encryption type used on the record. This parameter can be one of the following values:
+        /// NONE: Do not encrypt the records in the stream.
+        /// KMS: Use server-side encryption on the records in the stream using a customer-managed AWS KMS key.
+        encryption-type: option<encryption-type>,
     }
 
     variant error {
@@ -19,4 +48,8 @@ interface kinesis-types {
 world spin-kinesis {
     use kinesis-types.{blob, kinesis-record, error};
     export handle-batch-records: func(records: list<kinesis-record>) -> result<_, error>;
+}
+
+world spin-kinesis-sdk {
+    import kinesis-types;
 }

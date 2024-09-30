@@ -1,0 +1,15 @@
+[package]
+name = "spin-kinesis-sdk"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+rust-version = "1.71"
+include = ["../kinesis.wit"]
+
+[lib]
+name = "spin_kinesis_sdk"
+
+[dependencies]
+spin-executor = "3.0.1"
+spin-kinesis-macro = { path = "macro" }
+wit-bindgen = { workspace = true }

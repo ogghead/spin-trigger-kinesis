@@ -1,8 +1,17 @@
 [package]
 name = "trigger-kinesis"
-version = "0.2.0"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version = "1.78"
+
+[workspace.package]
+authors = ["Darwin Boersma <darwin@sadlark.com>", "Fermyon Engineering <engineering@fermyon.com>"]
+version = "0.3.0"
 edition = "2021"
-rust-version = "1.76"
+
+[workspace]
+members = ["sdk", "sdk/macro"]
 
 [dependencies]
 anyhow = "1.0.68"
@@ -25,3 +34,7 @@ wasmtime = { version = "21.0.1" }
 # This needs to be an explicit dependency to enable
 # '--features openssl/vendored', which is used for Linux releases.
 openssl = { version = "0.10" }
+
+
+[workspace.dependencies]
+wit-bindgen = "0.16.0"
