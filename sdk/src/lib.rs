@@ -16,6 +16,8 @@ pub mod wit {
 #[doc(inline)]
 pub use wit::fermyon::spin_kinesis::kinesis_types::Blob;
 #[doc(inline)]
+pub use wit::fermyon::spin_kinesis::kinesis_types::EncryptionType;
+#[doc(inline)]
 pub use wit::fermyon::spin_kinesis::kinesis_types::Error;
 #[doc(inline)]
 pub use wit::fermyon::spin_kinesis::kinesis_types::KinesisRecord;
