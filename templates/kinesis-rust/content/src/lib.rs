@@ -7,5 +7,6 @@ async fn handle_batch_records(records: Vec<KinesisRecord>) -> Result<(), Error> 
         let data = String::from_utf8(record.data.inner).unwrap();
         println!("  ... DATA: {:?}", data);
     }
+
     Ok(())
 }
