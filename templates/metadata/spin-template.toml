@@ -1,0 +1,8 @@
+manifest_version = "1"
+id = "kinesis-rust"
+description = "Kinesis handler/trigger using Rust."
+tags = ["kinesis", "rust"]
+
+[parameters]
+project-description = { type = "string",  prompt = "Description", default = "" }
+kinesis_arn = { type = "string", prompt = "Kinesis ARN", default = "" }
