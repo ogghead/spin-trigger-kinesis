@@ -5,4 +5,9 @@ tags = ["kinesis", "rust"]
 
 [parameters]
 project-description = { type = "string",  prompt = "Description", default = "" }
-kinesis_arn = { type = "string", prompt = "Kinesis ARN", default = "" }
+kinesis-arn = { type = "string", prompt = "Kinesis ARN", default = "" }
+batch-size = { type = "number", prompt = "Kinesis Batch Size", default = "10" }
+shard-idle-wait-millis
+detector-poll-millis
+shard-iterator-type
+component = 
