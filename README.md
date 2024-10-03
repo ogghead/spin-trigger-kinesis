@@ -78,11 +78,12 @@ version = "0.1.0"
 
 # One [[trigger.kinesis]] section for each stream to monitor
 [[trigger.kinesis]]
-stream_arn = "arn:aws:kinesis:us-east-1:1234567890:stream/TestStream"
-batch_size = 10
-shard_idle_wait_millis = 10
-detector_poll_millis = 30
 component = "test"
+stream_arn = "arn:aws:kinesis:us-east-1:1234567890:stream/TestStream"
+batch_size = 1000
+shard_idle_wait_millis = 250
+detector_poll_millis = 30000
+shard_iterator_type = "TRIM_HORIZON"
 
 [component.test]
 source = "..."
@@ -96,10 +97,8 @@ There are no custom command line options for this trigger.
 
 There is no SDK for kinesis guest components.  Use the `kinesis.wit` file to generate a trigger binding for your language.  Your Wasm component must _export_ the `handle-batch-records` function.  See `guest/src/lib.rs`  for how to do this in Rust.
 
-**Note:** In the current WIT, a record has a single `data` field. This contains the content of the record encoded as binary. Feedback is welcome on this design decision.
+**Note:** In the current WIT, a record directly matches [the AWS Kinesis record shape](https://docs.aws.amazon.com/kinesis/latest/APIReference/API_Record.html). This contains the content of the record encoded as binary. Feedback is welcome on this design decision.
 
-Your handler can an error, but should otherwise not return anything.
+Your handler can return an error, but should otherwise not return anything.
 
-**Note:** The trigger currently processes records using ShardIteratorType::Latest. This means that only records published after the app is spun up will be processed by the trigger.
-
-**Note:** Shards are processed in order, but there is no guarantee of ordering between shards.
+**Note:** Shards are processed in order, but there is no guarantee of processing ordering between shards.

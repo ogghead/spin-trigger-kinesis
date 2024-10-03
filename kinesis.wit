@@ -2,7 +2,7 @@ package fermyon:spin-kinesis@2.0.0;
 
 interface kinesis-types {
     /// The encryption type used on the record.
-    enum encryption-type {
+    variant encryption-type {
         /// Do not encrypt the records in the stream.
         NONE,
         /// Use server-side encryption on the records in the stream using a customer-managed AWS KMS key.
@@ -46,7 +46,7 @@ interface kinesis-types {
 }
 
 world spin-kinesis {
-    use kinesis-types.{blob, kinesis-record, error};
+    use kinesis-types.{blob, kinesis-record, encryption-type, error};
     export handle-batch-records: func(records: list<kinesis-record>) -> result<_, error>;
 }
 
