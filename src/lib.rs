@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
 use async_trait::async_trait;
-use aws::{ShardDetector, ShardPoller};
+use aws::{ShardDetector, ShardProcessor};
 use aws_config::BehaviorVersion;
 use aws_sdk_kinesis::{
     types::{Record, ShardIteratorType},
@@ -178,26 +178,35 @@ impl KinesisTrigger {
             &client,
             rx_finished_shard,
             tx_new_shard,
+            &id,
         );
-        tokio::spawn(shard_detector.poll_new_shards());
+        let mut shard_detector_handle = tokio::spawn(shard_detector.poll_new_shards());
 
         // Main event loop -- spawn a poller for each new shard received
-        while let Some(shard_id) = rx_new_shard.recv().await {
-            let shard_poller = ShardPoller::new(
-                &engine,
-                &id,
-                &tx_finished_shard,
-                &client,
-                &stream_arn,
-                shard_id,
-                batch_size,
-                shard_idle_wait_millis,
-                shard_iterator_type.clone(),
-            );
-            tokio::spawn(shard_poller.poll());
+        loop {
+            tokio::select! {
+                Some(shard_id) = rx_new_shard.recv() => {
+                    let shard_poller = ShardProcessor::new(
+                        &engine,
+                        &id,
+                        &tx_finished_shard,
+                        &client,
+                        &stream_arn,
+                        shard_id,
+                        batch_size,
+                        shard_idle_wait_millis,
+                        shard_iterator_type.clone(),
+                    );
+                    tokio::spawn(shard_poller.poll());
+                },
+                Err(e) = &mut shard_detector_handle => {
+                    return TerminationReason::Other(format!("[Kinesis] Error in shard detector: {e}"));
+                },
+                else => {
+                    return TerminationReason::Other("[Kinesis] Unexpected failure in processing. Exiting.".into());
+                }
+            }
         }
-
-        TerminationReason::Other("Shard detector task exited".to_string())
     }
 }
 
