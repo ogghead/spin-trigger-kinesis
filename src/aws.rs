@@ -3,7 +3,7 @@ use std::{collections::HashSet, sync::Arc, time::Duration};
 use anyhow::Result;
 use aws_sdk_kinesis::{
     operation::{get_records::GetRecordsOutput, list_shards::ListShardsOutput},
-    types::ShardIteratorType,
+    types::{Shard, ShardIteratorType},
     Client,
 };
 use spin_trigger::TriggerAppEngine;
@@ -11,7 +11,7 @@ use tracing::{instrument, Instrument};
 
 use crate::{KinesisRecordProcessor, KinesisTrigger};
 
-pub struct ShardPoller {
+pub struct ShardProcessor {
     engine: Arc<TriggerAppEngine<KinesisTrigger>>,
     component_id: Arc<String>,
     tx_finished_shard: tokio::sync::mpsc::Sender<String>,
@@ -23,8 +23,9 @@ pub struct ShardPoller {
     shard_iterator_type: ShardIteratorType,
 }
 
-impl ShardPoller {
+impl ShardProcessor {
     /// Try to create a new poller for the given stream and shard
+    #[instrument(name = "spin_trigger_kinesis.new_shard_processor", skip_all, fields(otel.name = format!("new_shard_processor {}", component_id)))]
     pub fn new(
         engine: &Arc<TriggerAppEngine<KinesisTrigger>>,
         component_id: &Arc<String>,
@@ -76,8 +77,8 @@ impl ShardPoller {
     }
 
     /// Poll for a batch of records to process
-    #[instrument(name = "spin_trigger_kinesis.poll_for_batch", skip_all, fields(otel.name = format!("poll_for_batch {}", self.component_id)))]
-    async fn poll_for_batch(&self, shard_iterator: impl Into<String>) -> Option<String> {
+    #[instrument(name = "spin_trigger_kinesis.process_batch", skip_all, fields(otel.name = format!("process_batch {}", self.component_id)))]
+    async fn process_batch(&self, shard_iterator: impl Into<String>) -> Option<String> {
         match self.get_records(shard_iterator).in_current_span().await {
             Ok(GetRecordsOutput {
                 records,
@@ -86,7 +87,12 @@ impl ShardPoller {
                 ..
             }) => {
                 if records.is_empty() && millis_behind_latest.unwrap_or_default() == 0 {
-                    tokio::time::sleep(self.shard_idle_wait_millis).await;
+                    tokio::time::sleep(self.shard_idle_wait_millis)
+                        .instrument(tracing::info_span!(
+                            "spin_trigger_kinesis.process_batch_idle",
+                            "otel.name" = format!("process_batch_idle {}", self.component_id)
+                        ))
+                        .await;
                 } else if !records.is_empty() {
                     let processor = KinesisRecordProcessor::new(&self.engine, &self.component_id);
                     // Wait until processing is completed for these records
@@ -114,7 +120,7 @@ impl ShardPoller {
             return;
         };
 
-        while let Some(new_shard_iterator) = self.poll_for_batch(shard_iterator).await {
+        while let Some(new_shard_iterator) = self.process_batch(shard_iterator).await {
             shard_iterator = new_shard_iterator;
         }
 
@@ -135,12 +141,14 @@ pub struct ShardDetector {
 
 impl ShardDetector {
     /// Create a new shard detector for the given stream
+    #[instrument(name = "spin_trigger_kinesis.new_shard_detector", skip_all, fields(otel.name = format!("new_shard_detector {}", component_id)))]
     pub fn new(
         stream_arn: &Arc<String>,
         detector_poll_millis: Duration,
         client: &Client,
         rx_finished_shard: tokio::sync::mpsc::Receiver<String>,
         tx_new_shard: tokio::sync::mpsc::Sender<String>,
+        component_id: &Arc<String>,
     ) -> Self {
         Self {
             stream_arn: stream_arn.clone(),
@@ -164,24 +172,29 @@ impl ShardDetector {
                     .list_shards()
                     .stream_arn(self.stream_arn.as_ref())
                     .send() => {
-                        let shards = new_shards
-                            .into_iter()
-                            .filter(|shard| !self.running_shards.contains(&shard.shard_id))
-                            .map(|shard| shard.shard_id)
-                            .collect::<Vec<_>>();
-                        for shard in shards {
-                            if let Err(e) = self.tx_new_shard.send(shard.clone()).await {
+                        for Shard {shard_id, ..} in new_shards {
+                            if self.running_shards.contains(&shard_id) {
+                                continue;
+                            }
+
+                            if let Err(e) = self.tx_new_shard.send(shard_id.clone()).await {
                                 tracing::error!(
-                                    "[Kinesis] Error sending new shard to poller: {:?}",
+                                    "[Kinesis] Error sending new shard to main loop: {:?}",
                                     e
                                 );
+                                return;
                             } else {
-                                self.running_shards.insert(shard);
+                                self.running_shards.insert(shard_id);
                             }
                         }
                         tokio::time::sleep(self.detector_poll_millis).await;
                 },
-                else => break
+                else => {
+                    tracing::error!(
+                        "[Kinesis] Unable to fetch shards from iterator. Shard detector exiting."
+                    );
+                    return;
+                }
             }
         }
     }

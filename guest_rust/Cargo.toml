@@ -10,6 +10,6 @@ crate-type = [ "cdylib" ]
 
 [dependencies]
 spin-sdk = "3.0"
-spin-kinesis-sdk = { git = "https://github.com/ogghead/spin-trigger-kinesis" }
+spin-kinesis-sdk = { path = "../sdk"}
 
 [workspace]
