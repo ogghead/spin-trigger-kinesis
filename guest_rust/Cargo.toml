@@ -1,9 +1,9 @@
 [package]
-name = "{{project-name | kebab_case}}"
+name = "guest-rust"
 version = "0.1.0"
 edition = "2021"
-authors = ["{{authors}}"]
-description = "{{project-description}}"
+authors = ["Darwin Boersma <darwin@sadlark.com>"]
+description = ""
 
 [lib]
 crate-type = [ "cdylib" ]
