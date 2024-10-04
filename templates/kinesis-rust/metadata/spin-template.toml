@@ -1,0 +1,12 @@
+manifest_version = "1"
+id = "kinesis-rust"
+description = "Kinesis handler/trigger using Rust."
+tags = ["kinesis", "rust"]
+
+[parameters]
+project-description = { type = "string", prompt = "Description", default = "" }
+stream-arn = { type = "string", prompt = "ARN" }
+batch-size = { type = "string", prompt = "Batch Size", default = "10", pattern = "^\\d{1,4}$" }
+shard-idle-wait-millis = { type = "string", prompt = "Shard Idle Wait Millis (ms)", default = "1000", pattern = "^\\d{1,6}$" }
+detector-poll-millis = { type = "string", prompt = "Detector Poll Millis (ms)", default = "30000", pattern = "^\\d{1,6}$" }
+shard-iterator-type = { type = "string", prompt = "Shard Iterator Type", default = "LATEST", pattern = "^(AT_SEQUENCE_NUMBER|AFTER_SEQUENCE_NUMBER|TRIM_HORIZON|LATEST|AT_TIMESTAMP)$" }

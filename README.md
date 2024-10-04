@@ -28,6 +28,20 @@ cargo build --release
 spin pluginify --install
 ```
 
+## Installing Template
+
+You can install the template using the following command:
+
+```bash
+spin templates install --git https://github.com/ogghead/spin-trigger-kinesis
+```
+
+Once the template is installed, you can create a new application using:
+
+```bash
+spin new -t kinesis-rust hello_kinesis --accept-defaults
+```
+
 ## Test
 
 The trigger uses the AWS configuration environment variables - these must be set before running.
