@@ -5,7 +5,7 @@ tags = ["kinesis", "rust"]
 
 [parameters]
 project-description = { type = "string", prompt = "Description", default = "" }
-stream-arn = { type = "string", prompt = "ARN" }
+stream-arn = { type = "string", prompt = "ARN", pattern = "^arn:aws.*:kinesis:.*:\\d{12}:stream/\\S+$" }
 batch-size = { type = "string", prompt = "Batch Size", default = "10", pattern = "^\\d{1,4}$" }
 shard-idle-wait-millis = { type = "string", prompt = "Shard Idle Wait Millis (ms)", default = "1000", pattern = "^\\d{1,6}$" }
 detector-poll-millis = { type = "string", prompt = "Detector Poll Millis (ms)", default = "30000", pattern = "^\\d{1,6}$" }

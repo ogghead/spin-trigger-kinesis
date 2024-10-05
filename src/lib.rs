@@ -1,7 +1,6 @@
 use std::{sync::Arc, time::Duration};
 
 use anyhow::Result;
-use async_trait::async_trait;
 use aws::{ShardDetector, ShardProcessor};
 use aws_config::BehaviorVersion;
 use aws_sdk_kinesis::{
@@ -9,8 +8,8 @@ use aws_sdk_kinesis::{
     Client,
 };
 use serde::{Deserialize, Serialize};
-use spin_core::InstancePre;
-use spin_trigger::{cli::NoArgs, TriggerAppEngine, TriggerExecutor};
+use spin_factors::{App, RuntimeFactors};
+use spin_trigger::{cli::NoCliArgs, Trigger, TriggerApp};
 
 mod aws;
 
@@ -24,10 +23,7 @@ use fermyon::spin_kinesis::kinesis_types::{self as kinesis, EncryptionType};
 use tokio::sync::mpsc;
 use tracing::{instrument, Instrument};
 
-pub(crate) type RuntimeData = ();
-
 pub struct KinesisTrigger {
-    engine: TriggerAppEngine<Self>,
     queue_components: Vec<Component>,
 }
 
@@ -70,20 +66,18 @@ enum TerminationReason {
     Other(String),
 }
 
-#[async_trait]
-impl TriggerExecutor for KinesisTrigger {
-    const TRIGGER_TYPE: &'static str = "kinesis";
-    type RuntimeData = RuntimeData;
-    type TriggerConfig = KinesisTriggerConfig;
-    type RunConfig = NoArgs;
-    type InstancePre = InstancePre<RuntimeData>;
+impl<F: RuntimeFactors> Trigger<F> for KinesisTrigger {
+    const TYPE: &'static str = "kinesis";
+    type CliArgs = NoCliArgs;
+    type InstanceState = ();
 
-    async fn new(engine: TriggerAppEngine<Self>) -> Result<Self> {
-        let queue_components = engine
-            .trigger_configs()
+    fn new(_cli_args: Self::CliArgs, app: &App) -> Result<Self> {
+        let queue_components = app
+            .trigger_configs::<KinesisTriggerConfig>(<Self as Trigger<F>>::TYPE)?
+            .into_iter()
             .map(|(_, config)| Component {
-                id: Arc::new(config.component.clone()),
-                stream_arn: Arc::new(config.stream_arn.clone()),
+                id: Arc::new(config.component),
+                stream_arn: Arc::new(config.stream_arn),
                 batch_size: config.batch_size.unwrap_or(100),
                 shard_idle_wait_millis: parse_milliseconds(
                     config.shard_idle_wait_millis.unwrap_or(1000),
@@ -94,20 +88,16 @@ impl TriggerExecutor for KinesisTrigger {
                 shard_iterator_type: ShardIteratorType::from(
                     config
                         .shard_iterator_type
-                        .clone()
                         .unwrap_or("LATEST".to_string())
                         .as_str(),
                 ),
             })
             .collect();
 
-        Ok(Self {
-            engine,
-            queue_components,
-        })
+        Ok(Self { queue_components })
     }
 
-    async fn run(self, _config: Self::RunConfig) -> Result<()> {
+    async fn run(self, trigger_app: TriggerApp<Self, F>) -> Result<()> {
         tokio::spawn(async move {
             tokio::signal::ctrl_c().await.unwrap();
             std::process::exit(0);
@@ -116,12 +106,12 @@ impl TriggerExecutor for KinesisTrigger {
         let config = aws_config::load_defaults(BehaviorVersion::latest()).await;
 
         let client = Client::new(&config);
-        let engine = Arc::new(self.engine);
+        let app = Arc::new(trigger_app);
 
         let loops = self
             .queue_components
             .iter()
-            .map(|component| Self::start_receive_loop(engine.clone(), &client, component));
+            .map(|component| Self::start_receive_loop(app.clone(), &client, component));
 
         let (tr, _, rest) = futures::future::select_all(loops).await;
         drop(rest);
@@ -144,20 +134,20 @@ fn parse_milliseconds(milliseconds: u64) -> Duration {
 }
 
 impl KinesisTrigger {
-    fn start_receive_loop(
-        engine: Arc<TriggerAppEngine<Self>>,
+    fn start_receive_loop<F: RuntimeFactors>(
+        app: Arc<TriggerApp<Self, F>>,
         client: &Client,
         component: &Component,
     ) -> tokio::task::JoinHandle<TerminationReason> {
-        let future = Self::receive(engine, client.clone(), component.clone());
+        let future = Self::receive(app, client.clone(), component.clone());
         tokio::task::spawn(future)
     }
 
     // This doesn't return a Result because we don't want a thoughtless `?` to exit the loop
     // and terminate the entire trigger.  Termination should be a conscious decision when
     // we are sure there is no point continuing.
-    async fn receive(
-        engine: Arc<TriggerAppEngine<Self>>,
+    async fn receive<F: RuntimeFactors>(
+        engine: Arc<TriggerApp<Self, F>>,
         client: Client,
         Component {
             stream_arn,
@@ -180,7 +170,10 @@ impl KinesisTrigger {
             tx_new_shard,
             &id,
         );
-        let mut shard_detector_handle = tokio::spawn(shard_detector.poll_new_shards());
+
+        let mut detector_handle = tokio::spawn(async move {
+            shard_detector.poll_new_shards().await;
+        });
 
         // Main event loop -- spawn a poller for each new shard received
         loop {
@@ -197,28 +190,28 @@ impl KinesisTrigger {
                         shard_idle_wait_millis,
                         shard_iterator_type.clone(),
                     );
-                    tokio::spawn(shard_poller.poll());
+                    tokio::spawn(async move { shard_poller.poll().await });
                 },
-                Err(e) = &mut shard_detector_handle => {
-                    return TerminationReason::Other(format!("[Kinesis] Error in shard detector: {e}"));
-                },
+                _ = &mut detector_handle => {
+                    return TerminationReason::Other("[Kinesis] Shard detector exited. Trigger exiting.".into());
+                }
                 else => {
-                    return TerminationReason::Other("[Kinesis] Unexpected failure in processing. Exiting.".into());
+                    return TerminationReason::Other("[Kinesis] Unexpected failure in processing. Trigger exiting.".into());
                 }
             }
         }
     }
 }
 
-struct KinesisRecordProcessor {
-    engine: Arc<TriggerAppEngine<KinesisTrigger>>,
+struct KinesisRecordProcessor<F: RuntimeFactors> {
+    app: Arc<TriggerApp<KinesisTrigger, F>>,
     component_id: Arc<String>,
 }
 
-impl KinesisRecordProcessor {
-    fn new(engine: &Arc<TriggerAppEngine<KinesisTrigger>>, component_id: &Arc<String>) -> Self {
+impl<F: RuntimeFactors> KinesisRecordProcessor<F> {
+    fn new(app: &Arc<TriggerApp<KinesisTrigger, F>>, component_id: &Arc<String>) -> Self {
         Self {
-            engine: engine.clone(),
+            app: app.clone(),
             component_id: component_id.clone(),
         }
     }
@@ -261,7 +254,8 @@ impl KinesisRecordProcessor {
     #[instrument(name = "spin_trigger_kinesis.execute_wasm", skip_all, fields(otel.name = format!("execute_wasm {}", self.component_id)))]
     async fn execute_wasm(&self, records: &[kinesis::KinesisRecord]) -> Result<()> {
         let component_id = &self.component_id;
-        let (instance, mut store) = self.engine.prepare_instance(component_id).await?;
+        let instance_builder = self.app.prepare(component_id)?;
+        let (instance, mut store) = instance_builder.instantiate(()).await?;
 
         let instance = SpinKinesis::new(&mut store, &instance)?;
 
