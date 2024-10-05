@@ -7,7 +7,7 @@ rust-version = "1.78"
 
 [workspace.package]
 authors = ["Darwin Boersma <darwin@sadlark.com>", "Fermyon Engineering <engineering@fermyon.com>"]
-version = "0.3.0"
+version = "0.3.1"
 edition = "2021"
 
 [workspace]
@@ -15,20 +15,19 @@ members = ["sdk", "sdk/macro"]
 
 [dependencies]
 anyhow = "1.0.68"
-async-trait = "0.1"
 aws-config = "1.5.5"
 aws-sdk-kinesis = "1.40.0"
 clap = { version = "3.1.15", features = ["derive", "env"] }
 futures = "0.3.25"
 serde = "1.0"
-spin-core = { git = "https://github.com/fermyon/spin", tag = "v2.6.0" }
-spin-telemetry = { git = "https://github.com/fermyon/spin", tag = "v2.6.0" }
-spin-trigger = { git = "https://github.com/fermyon/spin", tag = "v2.6.0" }
-tokio = { version = "1.37", features = ["full"] }
-tokio-scoped = "0.2.0"
-tokio-stream = "0.1.15"
+spin-core = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
+spin-factors = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
+spin-runtime-factors = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
+spin-telemetry = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
+spin-trigger = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
+tokio = { version = "1.40", features = ["rt", "macros", "time", "signal"] }
 tracing = { version = "0.1", features = ["log"] }
-wasmtime = { version = "21.0.1" }
+wasmtime = { version = "22.0" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # This needs to be an explicit dependency to enable
