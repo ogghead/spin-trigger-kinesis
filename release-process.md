@@ -14,7 +14,7 @@ To cut a new release of the kinesis trigger plugin, you will need to do the foll
 
     As an example, via the `git` CLI:
 
-    ```
+    ```sh
     # Create a GPG-signed and annotated tag
     git tag -s -m "Spin Kinesis Trigger v0.2.0" v0.2.0
 
@@ -22,9 +22,9 @@ To cut a new release of the kinesis trigger plugin, you will need to do the foll
     git push origin v0.2.0
     ```
 
-1. Pushing the tag upstream will trigger the [release action](https://github.com/ogghead/spin-trigger-kinesis/actions/workflows/release.yml).
+1. Pushing the tag upstream will trigger the [release action](https://github.com/ogghead/spin-trigger-kinesis/actions/workflows/build.yml).
     - The release build will create the packaged versions of the plugin, the updated plugin manifest and a checksums file
     - These assets are uploaded to a new GitHub release for the pushed tag
     - Release notes are auto-generated but edit as needed especially around breaking changes or other notable items
   
-1. Create a PR in the [fermyon/spin-plugins](https://github.com/fermyon/spin-plugins) repository with the [updated manifest](https://github.com/fermyon/spin-plugins/tree/main/manifests/kinesis-trigger).
+1. Create a PR in the [fermyon/spin-plugins](https://github.com/fermyon/spin-plugins) repository with the [updated manifest](https://github.com/fermyon/spin-plugins/tree/main/manifests/trigger-kinesis).
