@@ -16,18 +16,18 @@ members = ["sdk", "sdk/macro"]
 [dependencies]
 anyhow = "1.0.68"
 aws-config = "1.5.5"
-aws-sdk-kinesis = "1.40.0"
+aws-sdk-kinesis = "1.51.0"
 clap = { version = "3.1.15", features = ["derive", "env"] }
 futures = "0.3.25"
 serde = "1.0"
-spin-core = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
-spin-factors = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
-spin-runtime-factors = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
-spin-telemetry = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
-spin-trigger = { git = "https://github.com/fermyon/spin", rev = "4fbf872505976ded774005f602584c2feefbfd8b" }
-tokio = { version = "1.40", features = ["rt", "macros", "time", "signal"] }
+spin-core = { git = "https://github.com/fermyon/spin" }
+spin-factors = { git = "https://github.com/fermyon/spin" }
+spin-runtime-factors = { git = "https://github.com/fermyon/spin" }
+spin-telemetry = { git = "https://github.com/fermyon/spin" }
+spin-trigger = { git = "https://github.com/fermyon/spin" }
+tokio = { version = "1.38", features = ["rt", "macros", "time", "signal"] }
 tracing = { version = "0.1", features = ["log"] }
-wasmtime = { version = "22.0" }
+wasmtime = { version = "25.0.3" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # This needs to be an explicit dependency to enable
