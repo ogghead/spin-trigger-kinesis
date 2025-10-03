@@ -109,7 +109,7 @@ There are no custom command line options for this trigger.
 
 ## Writing kinesis components
 
-There is no SDK for kinesis guest components.  Use the `kinesis.wit` file to generate a trigger binding for your language.  Your Wasm component must _export_ the `handle-batch-records` function.  See `guest/src/lib.rs`  for how to do this in Rust.
+There is no SDK for kinesis guest components except for Rust.  Use the `kinesis.wit` file to generate a trigger binding for your language.  Your Wasm component must _export_ the `handle-batch-records` function.  See `guest/src/lib.rs`  for how to do this in Rust.
 
 **Note:** In the current WIT, a record directly matches [the AWS Kinesis record shape](https://docs.aws.amazon.com/kinesis/latest/APIReference/API_Record.html). This contains the content of the record encoded as binary. Feedback is welcome on this design decision.
 

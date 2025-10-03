@@ -16,10 +16,11 @@ mod aws;
 wasmtime::component::bindgen!({
     path: "kinesis.wit",
     world: "spin-kinesis",
-    async: true
+    imports: { default: async },
+    exports: { default: async },
 });
 
-use fermyon::spin_kinesis::kinesis_types::{self as kinesis, EncryptionType};
+use fermyon::spin_kinesis::kinesis_types::{self as kinesis};
 use tokio::sync::mpsc;
 use tracing::{instrument, Instrument};
 
